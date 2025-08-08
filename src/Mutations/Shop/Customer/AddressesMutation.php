@@ -47,7 +47,7 @@ class AddressesMutation extends Controller
         ]);
 
         try {
-            Event::dispatch('customer.address.create.before');
+            Event::dispatch('customer.addresses.create.before');
 
             $args = array_merge($args, [
                 'customer_id' => $customer->id,
@@ -56,7 +56,7 @@ class AddressesMutation extends Controller
 
             $customerAddress = $this->customerAddressRepository->create($args);
 
-            Event::dispatch('customer.address.create.after', $customerAddress);
+            Event::dispatch('customer.addresses.create.after', $customerAddress);
 
             return [
                 'success' => true,
@@ -98,7 +98,7 @@ class AddressesMutation extends Controller
         ]);
 
         try {
-            Event::dispatch('customer.address.update.before');
+            Event::dispatch('customer.addresses.update.before');
 
             $args = array_merge($args, [
                 'address' => implode(PHP_EOL, array_filter($args['address'])),
@@ -106,7 +106,7 @@ class AddressesMutation extends Controller
 
             $customerAddress = $this->customerAddressRepository->update($args, $args['id']);
 
-            Event::dispatch('customer.address.update.after', $customerAddress);
+            Event::dispatch('customer.addresses.update.after', $customerAddress);
 
             return [
                 'success' => true,
@@ -134,11 +134,11 @@ class AddressesMutation extends Controller
                 throw new CustomException(trans('bagisto_graphql::app.shop.customers.account.addresses.not-found'));
             }
 
-            Event::dispatch('customer.address.delete.before', $args['id']);
+            Event::dispatch('customer.addresses.delete.before', $args['id']);
 
             $this->customerAddressRepository->delete($args['id']);
 
-            Event::dispatch('customer.address.delete.after', $args['id']);
+            Event::dispatch('customer.addresses.delete.after', $args['id']);
 
             return [
                 'success' => true,
@@ -160,21 +160,23 @@ class AddressesMutation extends Controller
     {
         $customer = bagisto_graphql()->authorize();
 
-        if (! $customer->addresses->find($args['id'])) {
+        if (! $address = $customer->addresses->find($args['id'])) {
             throw new CustomException(trans('bagisto_graphql::app.shop.customers.account.addresses.not-found'));
+        }
+
+        if ($address->default_address) {
+            throw new CustomException(trans('bagisto_graphql::app.shop.customers.account.addresses.already-default'));
         }
 
         try {
             $customer->addresses->where('default_address', 1)->first()?->update(['default_address' => 0]);
 
-            $customerAddress = $customer->addresses->find($args['id']);
-
-            $customerAddress->update(['default_address' => 1]);
+            $address->update(['default_address' => 1]);
 
             return [
                 'success' => true,
-                'message' => trans('bagisto_graphql::app.admin.customers.addressess.default-update-success'),
-                'address' => $customerAddress,
+                'message' => trans('bagisto_graphql::app.admin.customers.addresses.default-update-success'),
+                'address' => $address,
             ];
         } catch (\Exception $e) {
             throw new CustomException($e->getMessage());

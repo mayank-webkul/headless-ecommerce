@@ -82,6 +82,7 @@ input UpdateProductInput {
     downloadableSamples: [UpdateDownloadableSamplesInput!] @rename(attribute: "downloadable_samples")
     bundleOptions: [UpdateBundleOptionsInput!] @rename(attribute: "bundle_options")
     booking: UpdateBookingInput
+    customizableOptions: [UpdateCustomizableOptionInput!] @rename(attribute: "customizable_options")
 }
 
 input UpdateVariantInput {
@@ -110,12 +111,41 @@ input CustomAttributeInput {
 input FilterProductsInput {
     page: Int!
     limit: Int!
-    productId: Int @rename(attribute: "product_id")
+    productId: Int @rename(attribute: "id")
     type: String
     sku: String
     name: String
     attributeFamily: Int @rename(attribute: "attribute_family")
     channel: String
+}
+
+input UpdateCustomizableOptionInput {
+    label: String!
+    type: UpdateCustomizableOptionInputTypeEnum!
+    isRequired: Boolean! @rename(attribute: "is_required")
+    sortOrder: Int! @rename(attribute: "sort_order")
+    maxCharacters: Int! @rename(attribute: "max_characters")
+    supportedFileExtensions: String! @rename(attribute: "supported_file_extensions")
+    prices: [UpdateCustomizableOptionPriceInput]!
+}
+
+input UpdateCustomizableOptionPriceInput {
+    label: String
+    price: Float!
+    sortOrder: Int @rename(attribute: "sort_order")
+}
+
+enum UpdateCustomizableOptionInputTypeEnum {
+    TEXT @enum(value: "text")
+    TEXTAREA @enum(value: "textarea")
+    CHECKBOX @enum(value: "checkbox")
+    RADIO @enum(value: "radio")
+    SELECT @enum(value: "select")
+    MULTISELECT @enum(value: "multiselect")
+    DATE @enum(value: "date")
+    DATETIME @enum(value: "datetime")
+    TIME @enum(value: "time")
+    FILE @enum(value: "file")
 }
 
 type ProductResponse {
@@ -195,7 +225,7 @@ type ProductCustomizableOption {
     productId: ID! @rename(attribute: "product_id")
     type: String
     isRequired: Boolean @rename(attribute: "is_required")
-    maxCharacters: Int @rename(attribute: "max_characters")
+    maxCharacters: String @rename(attribute: "max_characters")
     supportedFileExtensions: String @rename(attribute: "supported_file_extensions")
     sortOrder: Int @rename(attribute: "sort_order")
     product: Product @belongsTo(relation: "product")

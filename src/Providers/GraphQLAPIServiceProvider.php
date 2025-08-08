@@ -2,13 +2,21 @@
 
 namespace Webkul\GraphQLAPI\Providers;
 
+use Webkul\GraphQLAPI\Cart;
+use Webkul\Checkout\Cart as BaseCart;
+use Webkul\GraphQLAPI\BagistoGraphql;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
-use Webkul\GraphQLAPI\BagistoGraphql;
 use Webkul\GraphQLAPI\Console\Commands\Install as InstallGraphQL;
+use Webkul\GraphQLAPI\Http\Controllers\Shop\API\ReviewController;
+use Webkul\GraphQLAPI\Http\Controllers\Shop\API\CompareController;
+use Webkul\GraphQLAPI\Http\Controllers\Shop\API\WishlistController;
 use Webkul\GraphQLAPI\Facades\BagistoGraphql as BagistoGraphqlFacade;
-use Illuminate\Support\Facades\Validator;
-use Webkul\GraphQLAPI\Rules\ValidateAgreement;
+use Webkul\Shop\Http\Controllers\API\ReviewController as ReviewControllerBase;
+use Webkul\Shop\Http\Controllers\API\CompareController as CompareControllerBase;
+use Webkul\Shop\Http\Controllers\API\WishlistController as WishlistControllerBase;
+use Webkul\Admin\Http\Controllers\Customers\Customer\WishlistController as WishlistControllerAdminBase;
+use Webkul\GraphQLAPI\Http\Controllers\Admin\Customers\Customer\WishlistController as WishlistControllerAdmin;
 
 class GraphQLAPIServiceProvider extends ServiceProvider
 {
@@ -37,6 +45,16 @@ class GraphQLAPIServiceProvider extends ServiceProvider
 
         $this->app->register(ModuleServiceProvider::class);
         $this->app->register(EventServiceProvider::class);
+
+        $this->app->bind(CompareControllerBase::class, CompareController::class);
+
+        $this->app->bind(WishlistControllerBase::class, WishlistController::class);
+
+        $this->app->bind(ReviewControllerBase::class, ReviewController::class);
+
+        $this->app->bind(WishlistControllerAdminBase::class, WishlistControllerAdmin::class);
+
+        $this->app->bind(BaseCart::class, Cart::class);
     }
 
     /**
@@ -147,6 +165,11 @@ class GraphQLAPIServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(
             dirname(__DIR__).'/Config/auth/providers.php',
             'auth.providers'
+        );
+
+        $this->mergeConfigFrom(
+            dirname(__DIR__).'/Config/logging.php',
+            'logging.channels'
         );
     }
 }

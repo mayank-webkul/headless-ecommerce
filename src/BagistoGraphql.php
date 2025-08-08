@@ -146,14 +146,14 @@ class BagistoGraphql
         $modelPath = "$path{$model->id}/";
 
         $imageDirPath = storage_path("app/public/$modelPath");
-
+        
         if (! file_exists($imageDirPath)) {
             mkdir(storage_path("app/public/$modelPath"), 0777, true);
         }
-
+        
         if (! empty($imageUrl)) {
             $validatedImg = $this->validatePath($imageUrl, 'images');
-
+            
             if ($validatedImg) {
                 $imgName = basename($imageUrl);
 
@@ -284,6 +284,54 @@ class BagistoGraphql
     public function isNotBase64($string)
     {
         return ! preg_match('/^[a-zA-Z0-9\/+]+={0,2}$/', $string) || base64_encode(base64_decode($string)) !== $string;
+    }
+
+    public function manageCustomizableOptions($product, $data)
+    {
+        if (
+            $product->type != 'simple'
+            && $product->type != 'virtual'
+        ) {
+            return [];
+        }
+
+        $customizableOptions = [];
+
+        foreach ($data['customizable_options'] as $key => $option) {
+            // Set option key
+            $optionKey = "option_{$key}";
+
+            // Prepare option array
+            $customizableOption = [
+                // Locales
+                'en' => ['label' => $option['label'] ?? ''],
+                'type' => $option['type'] ?? '',
+                'is_required' => $option['is_required'] ?? '',
+                'sort_order' => $option['sort_order'] ?? '',
+            ];
+
+            // Optional fields
+            if (isset($option['max_characters'])) {
+                $customizableOption['max_characters'] = $option['max_characters'];
+            }
+            if (isset($option['supported_file_extensions'])) {
+                $customizableOption['supported_file_extensions'] = $option['supported_file_extensions'];
+            }
+
+            // Prices/options
+            $prices = [];
+            if (! empty($option['prices'])) {
+                foreach ($option['prices'] as $priceKey => $price) {
+                    $prices["price_{$priceKey}"] = $price;
+                }
+            }
+            
+            $customizableOption['prices'] = $prices;
+
+            $customizableOptions[$optionKey] = $customizableOption;
+        }
+        
+        return $customizableOptions;
     }
 
     /**
@@ -946,7 +994,7 @@ class BagistoGraphql
         curl_setopt($chkURL, CURLOPT_NOBODY, 1);
         curl_setopt($chkURL, CURLOPT_FAILONERROR, 1);
         curl_setopt($chkURL, CURLOPT_RETURNTRANSFER, 1);
-
+        
         if (
             curl_exec($chkURL) !== false
             && $this->getImageMIMEType($imageURL, $type)

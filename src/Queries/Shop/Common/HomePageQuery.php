@@ -2,20 +2,26 @@
 
 namespace Webkul\GraphQLAPI\Queries\Shop\Common;
 
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
-use Nuwave\Lighthouse\Support\Contracts\GraphQLContext;
-use Webkul\Attribute\Repositories\AttributeRepository;
+use Webkul\Product\Helpers\Toolbar;
+use Webkul\GraphQLAPI\Queries\BaseFilter;
+use Webkul\CMS\Repositories\PageRepository;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Webkul\GraphQLAPI\Validators\CustomException;
+use Webkul\Product\Repositories\ProductRepository;
 use Webkul\Category\Repositories\CategoryRepository;
 use Webkul\Customer\Repositories\CustomerRepository;
-use Webkul\GraphQLAPI\Queries\BaseFilter;
-use Webkul\GraphQLAPI\Validators\CustomException;
-use Webkul\Marketing\Repositories\SearchSynonymRepository;
-use Webkul\Product\Helpers\Toolbar;
+use Webkul\Attribute\Repositories\AttributeRepository;
+use Nuwave\Lighthouse\Support\Contracts\GraphQLContext;
 use Webkul\Product\Repositories\ElasticSearchRepository;
-use Webkul\Product\Repositories\ProductRepository;
+use Webkul\Marketing\Repositories\SearchSynonymRepository;
 use Webkul\Theme\Repositories\ThemeCustomizationRepository;
-use Webkul\CMS\Repositories\PageRepository;
+use Webkul\BookingProduct\Repositories\BookingProductRepository;
+use Webkul\BookingProduct\Helpers\AppointmentSlot as AppointmentSlotHelper;
+use Webkul\BookingProduct\Helpers\DefaultSlot as DefaultSlotHelper;
+use Webkul\BookingProduct\Helpers\EventTicket as EventTicketHelper;
+use Webkul\BookingProduct\Helpers\RentalSlot as RentalSlotHelper;
+use Webkul\BookingProduct\Helpers\TableSlot as TableSlotHelper;
 
 class HomePageQuery extends BaseFilter
 {
@@ -23,6 +29,8 @@ class HomePageQuery extends BaseFilter
      * Using const variable for status
      */
     const STATUS = 1;
+
+    protected array $bookingHelpers = [];
 
     /**
      * Create a new controller instance.
@@ -38,8 +46,22 @@ class HomePageQuery extends BaseFilter
         protected SearchSynonymRepository $searchSynonymRepository,
         protected ThemeCustomizationRepository $themeCustomizationRepository,
         protected Toolbar $productHelperToolbar,
-        protected PageRepository $PageRepository
-    ) {}
+        protected PageRepository $PageRepository,
+        protected BookingProductRepository $bookingProductRepository,
+        protected DefaultSlotHelper $defaultSlotHelper,
+        protected AppointmentSlotHelper $appointmentSlotHelper,
+        protected RentalSlotHelper $rentalSlotHelper,
+        protected EventTicketHelper $eventTicketHelper,
+        protected TableSlotHelper $tableSlotHelper
+    ) {
+        $this->bookingHelpers = [
+            'default'     => $this->defaultSlotHelper,
+            'appointment' => $this->appointmentSlotHelper,
+            'rental'      => $this->rentalSlotHelper,
+            'event'       => $this->eventTicketHelper,
+            'table'       => $this->tableSlotHelper,
+        ];
+    }
 
     /**
      * Get the default channel.
@@ -60,10 +82,15 @@ class HomePageQuery extends BaseFilter
     {
         visitor()->visit();
 
-        $customizations = $this->themeCustomizationRepository->orderBy('sort_order')->findWhere([
-            'status'     => self::STATUS,
-            'channel_id' => core()->getCurrentChannel()->id,
-        ]);
+        $customizations = $this->themeCustomizationRepository
+            ->with(['translations' => function ($query) {
+                $query->where('locale', core()->getCurrentLocale()->code);
+            }])
+            ->orderBy('sort_order')
+            ->findWhere([
+                'status'     => self::STATUS,
+                'channel_id' => core()->getCurrentChannel()->id,
+            ]);
         
         $result = $customizations->map(function ($item) {
             if ($item->type == 'image_carousel') {
@@ -100,9 +127,10 @@ class HomePageQuery extends BaseFilter
                     $href = $tag->getAttribute('href');
 
                     $links[$key] = [
-                        'url' => $href,
+                        'url'  => $href,
                         'slug' => '',
-                        'type' => ''
+                        'type' => '',
+                        'id'   => '',
                     ];
                     
                     if ($href) {
@@ -129,12 +157,16 @@ class HomePageQuery extends BaseFilter
 
                             $isTypeFetch = false;
 
-                            if ($this->categoryRepository->findBySlug($slug)) {
+                            if ($category = $this->categoryRepository->findBySlug($slug)) {
                                 $type = 'category';
 
+                                $id = $category->id;
+
                                 $isTypeFetch = true;
-                            } else if ($this->productRepository->setSearchEngine('database')->findBySlug($slug)) {
+                            } else if ($product = $this->productRepository->setSearchEngine('database')->findBySlug($slug)) {
                                 $type = 'product';
+
+                                $id = $product->id;
 
                                 $isTypeFetch = true;
                             }
@@ -142,12 +174,16 @@ class HomePageQuery extends BaseFilter
                             if (! $isTypeFetch) {
                                 $slug = last(explode('/', $slug));
 
-                                if ($this->categoryRepository->findBySlug($slug)) {
+                                if ($category = $this->categoryRepository->findBySlug($slug)) {
                                     $type = 'category';
 
+                                    $id = $category->id;
+
                                     $isTypeFetch = true;
-                                } else if ($this->PageRepository->findByUrlKey($slug)) {
+                                } else if ($cms = $this->PageRepository->findByUrlKey($slug)) {
                                     $type = 'cms';
+
+                                    $id = $cms->id;
 
                                     $isTypeFetch = true;
                                 }
@@ -155,9 +191,10 @@ class HomePageQuery extends BaseFilter
                         }
                         
                         $links[$key] = [
-                            'url' => $href,
+                            'url'  => $href,
                             'slug' => $slug,
-                            'type' => $type
+                            'type' => $type,
+                            'id'   => $id ?? '',
                         ];
                     }
                 }
@@ -255,7 +292,7 @@ class HomePageQuery extends BaseFilter
             $params[$input['key']] = $input['value'];
         }
 
-        $params = array_merge($params, [
+        $params = array_merge($params ?? [], [
             'channel_id'           => core()->getCurrentChannel()->id,
             'status'               => 1,
             'visible_individually' => 1,
@@ -555,5 +592,14 @@ class HomePageQuery extends BaseFilter
         }
         
         return $cookieConsentData;
+    }
+
+    public function getBookingProductSlots(mixed $rootValue, array $args, GraphQLContext $context)
+    {
+        $bookingProduct = $this->bookingProductRepository->find($args['id']);
+        
+        $date = isset($args['date']) ? date('Y-m-d', strtotime($args['date'])) : now()->format('Y-m-d');
+
+        return $this->bookingHelpers[$bookingProduct->type]->getSlotsByDate($bookingProduct, $date);
     }
 }

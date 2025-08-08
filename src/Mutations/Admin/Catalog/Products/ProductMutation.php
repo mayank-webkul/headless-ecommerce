@@ -178,6 +178,10 @@ class ProductMutation extends Controller
             $args['customer_group_prices'] = bagisto_graphql()->manageCustomerGroupPrices($product, $args);
         }
 
+        if (! empty($args['customizable_options'])) {
+            $args['customizable_options'] = bagisto_graphql()->manageCustomizableOptions($product, $args);
+        }
+        
         $validator = $this->validateFormData($args['id'], $args);
 
         if ($validator->fails()) {
@@ -220,6 +224,13 @@ class ProductMutation extends Controller
             $videoUrls = $args['videos'];
 
             unset($args['videos']);
+        }
+
+        if (
+            $product->type != 'downloadable'
+            && isset($args['inventories'])
+        ) {
+            unset($args['inventories']);
         }
 
         $inventories = [];
@@ -287,8 +298,8 @@ class ProductMutation extends Controller
             'special_price_to'   => 'nullable|date|after_or_equal:special_price_from',
             'special_price'      => ['nullable', new Decimal, 'lt:price'],
         ]);
-
-        foreach ($product->getEditableAttributes() as $attribute) {
+        
+        foreach ($product->getEditableAttributes() as $attribute) {            
             if (
                 $attribute->code == 'sku'
                 || $attribute->type == 'boolean'
@@ -321,10 +332,10 @@ class ProductMutation extends Controller
             }
 
             if ($attribute->is_unique) {
-                array_push($validations, function ($field, $value, $fail) use ($attribute, $id) {
+                array_push($validations, function ($field, $value, $fail) use ($attribute, $id, $data) {
                     $column = ProductAttributeValue::$attributeTypeFields[$attribute->type];
-
-                    if (! $this->productAttributeValueRepository->isValueUnique($id, $attribute->id, $column, request($attribute->code))) {
+                    
+                    if (! $this->productAttributeValueRepository->isValueUnique($id, $attribute->id, $column, $data[$attribute->code])) {
                         $fail('The :attribute has already been taken.');
                     }
                 });

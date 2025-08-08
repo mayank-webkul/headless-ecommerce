@@ -38,7 +38,7 @@ class PushNotificationMutation extends Controller
         ]);
 
         try {
-            $imageUrl = $data['image'] ?? '';
+            $imageUrl = $args['image'] ?? '';
 
             if (isset($args['image'])) {
                 unset($args['image']);
@@ -50,7 +50,7 @@ class PushNotificationMutation extends Controller
 
             Event::dispatch('settings.notification.create.after', $notification);
 
-            bagisto_graphql()->uploadImage($notification, $imageUrl, 'notification/', 'image_url');
+            bagisto_graphql()->uploadImage($notification, $imageUrl, 'notification/', 'image');
 
             return [
                 'success'           => true,
@@ -105,7 +105,7 @@ class PushNotificationMutation extends Controller
 
             Event::dispatch('settings.notification.update.after', $notification);
 
-            bagisto_graphql()->uploadImage($notification, $imageUrl, 'notification/', 'image_url');
+            bagisto_graphql()->uploadImage($notification, $imageUrl, 'notification/', 'image');
 
             return [
                 'success'           => true,
