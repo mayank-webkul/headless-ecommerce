@@ -4,6 +4,7 @@ namespace Webkul\GraphQLAPI\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Encryption\Encrypter;
+use Webkul\GraphQLAPI\Events\ComposerEvents;
 use Webkul\GraphQLAPI\Providers\GraphQLAPIServiceProvider;
 
 class Install extends Command
@@ -29,58 +30,68 @@ class Install extends Command
      */
     public function handle()
     {
-        $this->warn('Step1: Generating JWT Secret token...');
-        $this->call('jwt:secret');
+        $this->generateEnvironmentKeys();
 
-        $this->warn('Step2: Migrating Notification tables into database...');
-        $this->call('migrate');
+        $this->callSilently('jwt:secret', [
+            '--force' => true,
+        ]);
 
-        $this->warn('Step3: Publishing GraphQLAPI Provider File...');
-        $this->info($this->call('vendor:publish', [
+        $this->components->info('JWT secret key generated successfully.');
+
+        $this->call('migrate', [
+            '--path' => 'vendor/bagisto/graphql-api/src/Database/Migrations',
+        ]);
+
+        $this->call('vendor:publish', [
             '--provider' => GraphQLAPIServiceProvider::class,
             '--force'    => true,
-        ]));
+        ]);
 
-        $key = 'base64:'.base64_encode(
-            Encrypter::generateKey($this->laravel['config']['app.cipher'])
-        );
+        $this->call('optimize:clear');
 
-        $envPath = base_path('.env');
-        $envContent = file_get_contents($envPath);
+        ComposerEvents::postCreateProject();
 
-        if (preg_match('/^MOBIKUL_API_KEY=.*$/m', $envContent)) {
-            // Replace existing key
-            $envContent = preg_replace(
-                '/^MOBIKUL_API_KEY=.*$/m',
-                "MOBIKUL_API_KEY={$key}",
-                $envContent
-            );
-            file_put_contents($envPath, $envContent);
-        } else {
-            // Append new key
-            file_put_contents($envPath, PHP_EOL."MOBIKUL_API_KEY={$key}".PHP_EOL, FILE_APPEND);
-        }
+        $this->components->info('🎉 Bagisto GraphQL API package installed successfully!');
+    }
+
+    /**
+     * Generate the environment keys.
+     *
+     * @return void
+     */
+    protected function generateEnvironmentKeys()
+    {
+        $key = base64_encode(Encrypter::generateKey(config('app.cipher')));
 
         $graphqlEndpoint = rtrim(env('APP_URL'), '/').'/graphql';
 
-        if (preg_match('/^GRAPHQL_ENDPOINT=.*$/m', $envContent)) {
-            // Replace existing endpoint
-            $envContent = preg_replace(
-                '/^GRAPHQL_ENDPOINT=.*$/m',
-                "GRAPHQL_ENDPOINT={$graphqlEndpoint}",
-                $envContent
-            );
-            file_put_contents($envPath, $envContent);
-        } else {
-            // Append new endpoint
-            file_put_contents($envPath, PHP_EOL."GRAPHQL_ENDPOINT={$graphqlEndpoint}".PHP_EOL, FILE_APPEND);
+        $envPath = base_path('.env');
+
+        $envContent = file_get_contents($envPath);
+
+        $updates = [
+            'MOBIKUL_API_KEY'              => "base64:{$key}",
+            'GRAPHQL_ENDPOINT'             => $graphqlEndpoint,
+            'JWT_TTL'                      => 525600,
+            'JWT_SHOW_BLACKLIST_EXCEPTION' => 'true',
+        ];
+
+        foreach ($updates as $envKey => $envValue) {
+            $pattern = "/^{$envKey}=.*$/m";
+
+            if (preg_match($pattern, $envContent)) {
+                $envContent = preg_replace($pattern, "{$envKey}={$envValue}", $envContent);
+            } else {
+                $envContent .= PHP_EOL."{$envKey}={$envValue}";
+            }
         }
 
-        $this->warn('Step4: MOBIKUL_API_KEY has been generated and added to .env file.');
+        $result = file_put_contents($envPath, trim($envContent).PHP_EOL);
 
-        $this->warn('Step: Clearing the cache...');
-        $this->call('optimize:clear');
+        if ($result === false) {
+            $this->components->error("Failed to write to .env file at {$envPath}. Please check file permissions.");
 
-        $this->comment('Success: Bagisto GraphQL API has been configured successfully.');
+            return;
+        }
     }
 }
